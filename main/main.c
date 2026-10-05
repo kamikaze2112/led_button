@@ -6,25 +6,107 @@
 #include "esp_timer.h"
 #include "freertos/queue.h"
 #include "driver/ledc.h"
+#include "nvs.h"
+#include "nvs_flash.h"
+
+#define NVS_NAMESPACE               "nightstand"
+#define NVS_KEY_DUTY_MIN            "led_min"
+#define NVS_KEY_DUTY_MAX            "led_max"
+#define NVS_KEY_FADE_TIME_MS        "fade_time"
+
+#define VIBE_GPIO                   GPIO_NUM_3
+#define LED_GPIO                    GPIO_NUM_2
+#define BUTTON_GPIO                 GPIO_NUM_1
+
+#define LONG_PRESS_MS               1000
+#define LONGER_PRESS_MS             2500
+
+#define VIBE_PULSE_ON               200
+#define VIBE_PULSE_OFF              100
+
+#define LEDC_FREQ_HZ                4000
+
+#define LED_DUTY_MIN_DEFAULT        10
+#define LED_DUTY_MAX_DEFAULT        4096
+#define LED_FADE_TIME_MS_DEFAULT    2500
+
 
 static const char *TAG = "nightstand_button";
 static QueueHandle_t vibeQueue;
 
-#define VIBE_GPIO           GPIO_NUM_3
-#define LED_GPIO            GPIO_NUM_2
-#define BUTTON_GPIO         GPIO_NUM_1
+static uint16_t led_duty_min = LED_DUTY_MIN_DEFAULT;
+static uint16_t led_duty_max = LED_DUTY_MAX_DEFAULT;
+static uint16_t led_fade_time_ms = LED_FADE_TIME_MS_DEFAULT;
 
-#define LONG_PRESS_MS       1000
-#define LONGER_PRESS_MS     2500
+static void load_setting(nvs_handle_t handle, const char *key, uint16_t *value) {
 
-#define VIBE_PULSE_ON       200
-#define VIBE_PULSE_OFF      100
+    esp_err_t err = nvs_get_u16(handle, key, value);
 
-#define LEDC_FREQ_HZ        4000
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Loaded %s: %u.", key, *value);
+    } else if (err == ESP_ERR_NVS_NOT_FOUND) {
+        ESP_LOGI(TAG, "No entry for %s, using defaults: %u", key, *value);
+    } else {
+        ESP_LOGE(TAG, "Error loading %s: %s", key, esp_err_to_name(err));
+    }
+}
 
-#define LED_DUTY_MIN        10
-#define LED_DUTY_MAX        4096
-#define LED_FADE_TIME_MS    2500
+static void save_setting(const char *key, uint16_t value) {
+
+    nvs_handle_t nvs;
+
+    esp_err_t err = nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs);
+
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to open NVS for writing with error: %s", esp_err_to_name(err));
+        return;
+    }
+
+    err = nvs_set_u16(nvs, key, value);
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Set %s to %u.", key, value);
+
+        err = nvs_commit(nvs);
+
+        if (err == ESP_OK) {
+           ESP_LOGI(TAG, "Saved %u to %s.", value, key);
+        } else {
+        ESP_LOGE(TAG, "Failed to commit %s with error: %s", key, esp_err_to_name(err));
+        }
+
+    } else {
+        ESP_LOGE(TAG, "Failed to set %s with error: %s", key, esp_err_to_name(err));
+    }
+    
+    nvs_close(nvs);
+}
+
+
+static void setup_nvs(void) {
+
+    ESP_LOGI(TAG, "Starting NVS and loading settings");
+
+    esp_err_t err = nvs_flash_init();
+
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+
+    ESP_ERROR_CHECK(err);
+
+    nvs_handle_t nvs;
+
+    ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &nvs));
+
+    load_setting(nvs, NVS_KEY_DUTY_MIN, &led_duty_min);
+    load_setting(nvs, NVS_KEY_DUTY_MAX, &led_duty_max);
+    load_setting(nvs, NVS_KEY_FADE_TIME_MS, &led_fade_time_ms);
+
+    nvs_close(nvs);
+
+}
 
 
 static void setup_led(void) {
@@ -102,20 +184,23 @@ static void vibeTask(void *arg) {
 
 }
 
+
 static void fadeTask(void *arg) {
 
     while(1) {
-        ledc_set_fade_with_time(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, LED_DUTY_MAX, LED_FADE_TIME_MS);
+        ledc_set_fade_with_time(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, led_duty_max, led_fade_time_ms);
         ledc_fade_start(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, LEDC_FADE_WAIT_DONE);
-        ledc_set_fade_with_time(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, LED_DUTY_MIN, LED_FADE_TIME_MS);
+        ledc_set_fade_with_time(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, led_duty_min, led_fade_time_ms);
         ledc_fade_start(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, LEDC_FADE_WAIT_DONE);
     }
 }
+
 
 void app_main(void)
 {
     setup_gpio();
     setup_led();
+    setup_nvs();
 
     vibeQueue = xQueueCreate(4, sizeof(int));
     xTaskCreate(vibeTask, "vibe", 3072, NULL, 5, NULL);
