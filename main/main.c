@@ -8,6 +8,8 @@
 #include "driver/ledc.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "wifi.h"
+
 
 #define NVS_NAMESPACE               "nightstand"
 #define NVS_KEY_DUTY_MIN            "led_min"
@@ -201,6 +203,7 @@ void app_main(void)
     setup_gpio();
     setup_led();
     setup_nvs();
+    setup_wifi();
 
     vibeQueue = xQueueCreate(4, sizeof(int));
     xTaskCreate(vibeTask, "vibe", 3072, NULL, 5, NULL);
