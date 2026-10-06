@@ -9,6 +9,7 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "wifi.h"
+#include "vibe.h"
 
 
 #define NVS_NAMESPACE               "nightstand"
@@ -16,15 +17,11 @@
 #define NVS_KEY_DUTY_MAX            "led_max"
 #define NVS_KEY_FADE_TIME_MS        "fade_time"
 
-#define VIBE_GPIO                   GPIO_NUM_3
 #define LED_GPIO                    GPIO_NUM_2
 #define BUTTON_GPIO                 GPIO_NUM_1
 
 #define LONG_PRESS_MS               1000
 #define LONGER_PRESS_MS             2500
-
-#define VIBE_PULSE_ON               200
-#define VIBE_PULSE_OFF              100
 
 #define LEDC_FREQ_HZ                4000
 
@@ -34,7 +31,6 @@
 
 
 static const char *TAG = "nightstand_button";
-static QueueHandle_t vibeQueue;
 
 static uint16_t led_duty_min = LED_DUTY_MIN_DEFAULT;
 static uint16_t led_duty_max = LED_DUTY_MAX_DEFAULT;
@@ -151,39 +147,7 @@ static void setup_gpio(void) {
         .intr_type      = GPIO_INTR_DISABLE,
     };
 
-    gpio_config_t vibe_cfg = {
-        .pin_bit_mask   = 1ULL << VIBE_GPIO,
-        .mode           = GPIO_MODE_OUTPUT,
-        .pull_up_en     = GPIO_PULLUP_DISABLE,
-        .pull_down_en   = GPIO_PULLDOWN_DISABLE,
-        .intr_type      = GPIO_INTR_DISABLE,
-    };
-
     ESP_ERROR_CHECK(gpio_config(&button_cfg));
-    ESP_ERROR_CHECK(gpio_config(&vibe_cfg));
-
-    ESP_LOGI(TAG, "GPIO Setup Complete.  Button: GPIO_%d  Vibe: GPIO_%d", BUTTON_GPIO, VIBE_GPIO);
-
-    gpio_set_level(VIBE_GPIO, 0);
-
-}
-
-
-static void vibeTask(void *arg) {
-    
-    int pulses;
-
-    while(1) {
-        if(xQueueReceive(vibeQueue, &pulses, portMAX_DELAY)) {
-            for(int i = 0; i < pulses; i++) {
-                gpio_set_level(VIBE_GPIO, 1);
-                vTaskDelay(pdMS_TO_TICKS(VIBE_PULSE_ON));
-                gpio_set_level(VIBE_GPIO, 0);
-                vTaskDelay(pdMS_TO_TICKS(VIBE_PULSE_OFF));
-            }
-        }
-    }
-
 }
 
 
@@ -200,13 +164,14 @@ static void fadeTask(void *arg) {
 
 void app_main(void)
 {
+    vibe_setup();
+    
     setup_gpio();
     setup_led();
     setup_nvs();
     setup_wifi();
 
-    vibeQueue = xQueueCreate(4, sizeof(int));
-    xTaskCreate(vibeTask, "vibe", 3072, NULL, 5, NULL);
+ 
     xTaskCreate(fadeTask, "fade", 3072, NULL, 3, NULL);
 
     bool isLongPress = false;
@@ -259,7 +224,7 @@ void app_main(void)
                     isLongPress = true;
                     ESP_LOGI(TAG, "Long Press Buzz 1");
                     int pulses = 1;
-                    xQueueSend(vibeQueue, &pulses, 0);
+                    vibe_buzz(pulses);
                 }
             } 
             
@@ -268,7 +233,7 @@ void app_main(void)
                     isLongerPress = true;
                     ESP_LOGI(TAG, "Longer Press Buzz 2");
                     int pulses = 2;
-                    xQueueSend(vibeQueue, &pulses, 0);
+                    vibe_buzz(pulses);
                 }
             }
         }
