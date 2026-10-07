@@ -1,11 +1,3 @@
-#include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "driver/gpio.h"
-#include "esp_log.h"
-#include "esp_timer.h"
-#include "freertos/queue.h"
-#include "driver/ledc.h"
 #include "vibe.h"
 #include "settings.h"
 #include "wifi.h"
@@ -16,6 +8,8 @@
 void app_main(void)
 {
 
+    // These need to be called in this order to prevent things from going sideways.
+    
     settings_setup();
     wifi_setup();
     led_setup();

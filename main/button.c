@@ -65,8 +65,7 @@ static void button_task(void *arg) {
                 if (!isLongPress) {
                     isLongPress = true;
                     ESP_LOGI(TAG, "Long Press Buzz 1");
-                    int pulses = 1;
-                    vibe_buzz(pulses);
+                    vibe_buzz(1);
                 }
             } 
             
@@ -74,8 +73,7 @@ static void button_task(void *arg) {
                 if (!isLongerPress) {
                     isLongerPress = true;
                     ESP_LOGI(TAG, "Longer Press Buzz 2");
-                    int pulses = 2;
-                    vibe_buzz(pulses);
+                    vibe_buzz(2);
                 }
             }
         }

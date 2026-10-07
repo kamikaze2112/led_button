@@ -1,6 +1,6 @@
 #pragma once
 
-#include "stdint.h"
+#include <stdint.h>
 
 void settings_setup();
 void settings_load(const char *key, uint16_t *value);

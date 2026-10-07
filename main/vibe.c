@@ -58,5 +58,11 @@ void vibe_setup() {
 void vibe_buzz(int pulses) {
 
     ESP_LOGI(TAG, "vibe_buzz");
+
+    if (vibeQueue == NULL) {
+        ESP_LOGE(TAG, "vibe_buzz called before vibe_setup");
+        return;
+    }
+    
     xQueueSend(vibeQueue, &pulses, 0);
 }
