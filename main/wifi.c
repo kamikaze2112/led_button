@@ -23,7 +23,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 }
 
 
-void setup_wifi(void) {
+void wifi_setup(void) {
     ESP_LOGI(TAG, "setup_wifi");
 
     ESP_ERROR_CHECK(esp_netif_init());

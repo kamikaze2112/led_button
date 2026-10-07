@@ -1,3 +1,3 @@
 #pragma once
 
-void setup_wifi(void);
+void wifi_setup(void);
