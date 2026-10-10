@@ -5,6 +5,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "vibe.h"
+#include "mqtt.h"
 
 #define LONG_PRESS_MS               1000
 #define LONGER_PRESS_MS             2500
@@ -40,14 +41,17 @@ static void button_task(void *arg) {
                 if (held_time >= LONGER_PRESS_MS) {
                     // LONGER PRESS
                     ESP_LOGI(TAG, "Longer Press Detected");
+                    mqtt_button(MQTT_LONGER_PRESS);
                 
                 } else if (held_time >= LONG_PRESS_MS) {
                     // LONG PRESS
                     ESP_LOGI(TAG, "Long Press Detected");
-                
+                    mqtt_button(MQTT_LONG_PRESS);
+
                 } else {
                     // SHORT PRESS
                     ESP_LOGI(TAG, "Short Press Detected");
+                    mqtt_button(MQTT_SHORT_PRESS);
                 }
 
                 ESP_LOGI(TAG, "Button held for %lld ms.", (long long)held_time);
