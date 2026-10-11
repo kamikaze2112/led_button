@@ -8,7 +8,7 @@
 
 #define VIBE_GPIO                   GPIO_NUM_3
 #define VIBE_PULSE_ON               200
-#define VIBE_PULSE_OFF              100
+#define VIBE_PULSE_OFF              50
 
 static const char *TAG = "button/vibe";
 
