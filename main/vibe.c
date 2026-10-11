@@ -10,7 +10,7 @@
 #define VIBE_PULSE_ON               200
 #define VIBE_PULSE_OFF              100
 
-static const char *TAG = "vibe";
+static const char *TAG = "button/vibe";
 
 static QueueHandle_t vibeQueue;
 

@@ -12,7 +12,7 @@
 
 #define BUTTON_GPIO                 GPIO_NUM_1
 
-static const char *TAG = "button";
+static const char *TAG = "button/button";
 
 static void button_task(void *arg) {
 

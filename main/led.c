@@ -5,7 +5,8 @@
 #include "driver/ledc.h"
 #include "led.h"
 #include "settings.h"
-#include <stdint.h>
+#include <stdbool.h>
+#include "esp_timer.h"
 
 #define NVS_KEY_PCT_MIN             "pwm_min"
 #define NVS_KEY_PCT_MAX             "pwm_max"
@@ -22,11 +23,13 @@
 #define LED_SPEED_MODE              LEDC_LOW_SPEED_MODE
 #define LED_CHANNEL                 LEDC_CHANNEL_0
 
-static const char *TAG = "led";
+static const char *TAG = "button/led";
 
 static uint16_t led_min_pct = LED_MIN_PCT_DEFAULT;
 static uint16_t led_max_pct = LED_MAX_PCT_DEFAULT;
 static uint16_t led_fade_time_ms = LED_FADE_TIME_MS_DEFAULT;
+
+static volatile bool ota_flag = false;
 
 static uint32_t pct_to_duty(uint16_t pct) {
     return pct * 8191 / 100;
@@ -35,10 +38,21 @@ static uint32_t pct_to_duty(uint16_t pct) {
 static void fade_task(void *arg) {
 
     while(1) {
+
+    if(ota_flag) {
+
+        ledc_set_duty_and_update(LED_SPEED_MODE, LED_CHANNEL, pct_to_duty(100), 0);
+        vTaskDelay(pdMS_TO_TICKS(500));
+        ledc_set_duty_and_update(LED_SPEED_MODE, LED_CHANNEL, 0, 0);
+        vTaskDelay(pdMS_TO_TICKS(500));
+
+    } else {
+
         ledc_set_fade_with_time(LED_SPEED_MODE, LED_CHANNEL, pct_to_duty(led_max_pct), led_fade_time_ms);
         ledc_fade_start(LED_SPEED_MODE, LED_CHANNEL, LEDC_FADE_WAIT_DONE);
         ledc_set_fade_with_time(LED_SPEED_MODE, LED_CHANNEL, pct_to_duty(led_min_pct), led_fade_time_ms);
         ledc_fade_start(LED_SPEED_MODE, LED_CHANNEL, LEDC_FADE_WAIT_DONE);
+        }
     }
 }
 
@@ -78,6 +92,10 @@ void led_setup(void) {
     ESP_LOGI(TAG, "LED setup complete.");
 
 }
+
+void led_set_ota(bool on) {
+       ota_flag = on;
+   }
 
 void led_set_min(uint16_t pct) {
     if (pct > 100) pct = 100;

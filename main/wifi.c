@@ -6,7 +6,7 @@
 #include "esp_netif.h"
 
 
-static const char *TAG = "nightstand_button/wifi";
+static const char *TAG = "button/wifi";
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
 

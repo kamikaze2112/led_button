@@ -12,8 +12,12 @@
 #include <string.h>
 #include <stdlib.h>
 #include "led.h"
+#include "ota.h"
+#include "esp_ota_ops.h"
 
-static const char *TAG = "mqtt";
+#define HA_STATUS_TOPIC "homeassistant/status"
+
+static const char *TAG = "button/mqtt";
 
 static char device_uid[16];
 static char status_topic[32];
@@ -23,11 +27,10 @@ static char fade_set[48];
 static char min_state[48];
 static char max_state[48];
 static char fade_state[48];
+static char ota_set[48];
 
 static esp_mqtt_client_handle_t mqtt_handle;
-
 static bool client_started = false;
-
 static char press_topic[40];
 
 static void mqtt_publish(const char *topic, const char *payload, int qos, int retain) {
@@ -56,29 +59,6 @@ static void mqtt_state() {
 
 }
 
-static void mqtt_data(int topic_len, const char *topic, int data_len, const char *data) {
-
-    char d[10];
-    snprintf(d, sizeof(d), "%.*s", data_len, data);
-    int dnum = atoi(d);
-
-    if (dnum < 0) dnum = 0;
-
-    if (topic_len == strlen(min_set) && strncmp(topic, min_set, topic_len) == 0) {
-        led_set_min(dnum);
-    }
-
-    if (topic_len == strlen(max_set) && strncmp(topic, max_set, topic_len) == 0) {
-        led_set_max(dnum);
-    }
-
-    if (topic_len == strlen(fade_set) && strncmp(topic, fade_set, topic_len) == 0) {
-        led_set_fade(dnum);
-    }
-
-    mqtt_state();
-}
-
 static void mqtt_subscribe(const char *topic) {
 
     int msg_id = esp_mqtt_client_subscribe_single(mqtt_handle, topic, 1);
@@ -96,19 +76,38 @@ static void mqtt_discovery() {
     char min_id[40];
     char max_id[40];
     char fade_id[40];
-      
+    char ota_id[40];
+    char url[32];
+
+    const esp_app_desc_t *app = esp_app_get_description();
+    const esp_partition_t *running = esp_ota_get_running_partition();
+
+    char fw[64];
+    snprintf(fw, sizeof(fw), "%s (%s)", app->version, running->label);
+    
+    esp_netif_t *radio = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    esp_netif_ip_info_t addr_info;
+    if (radio != NULL) {
+        esp_netif_get_ip_info(radio, &addr_info);
+    }
+
+    snprintf(url, sizeof(url), "http://" IPSTR, IP2STR(&addr_info.ip));
+    
     snprintf(press_id, sizeof(press_id), "%s_press", device_uid);
     snprintf(config_topic, sizeof(config_topic), "homeassistant/device/%s/config", device_uid);
     snprintf(min_id, sizeof(min_id), "%s_led_min", device_uid);
     snprintf(max_id, sizeof(max_id), "%s_led_max", device_uid);
     snprintf(fade_id, sizeof(fade_id), "%s_fade_time", device_uid);
-
+    snprintf(ota_id, sizeof(ota_id), "%s_ota_id", device_uid);
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "availability_topic", status_topic);
     cJSON *dev = cJSON_AddObjectToObject(root, "device");
     cJSON_AddStringToObject(dev, "identifiers", device_uid);
     cJSON_AddStringToObject(dev, "name", device_uid);
+    cJSON_AddStringToObject(dev, "configuration_url", url);
+    cJSON_AddStringToObject(dev, "sw_version", fw);
+
     cJSON *origin = cJSON_AddObjectToObject(root, "origin");
     cJSON_AddStringToObject(origin, "name", "button-fw");
 
@@ -157,6 +156,12 @@ static void mqtt_discovery() {
     cJSON_AddNumberToObject(fade_ms, "step", 1);
     cJSON_AddStringToObject(fade_ms, "mode", "slider");
 
+    cJSON *ota = cJSON_AddObjectToObject(comps, "ota");
+    cJSON_AddStringToObject(ota, "platform", "button");
+    cJSON_AddStringToObject(ota, "name", "OTA (Click visit to upload)");
+    cJSON_AddStringToObject(ota, "unique_id", ota_id);
+    cJSON_AddStringToObject(ota, "command_topic", ota_set);
+
     char *payload = cJSON_Print(root);
     ESP_LOGI(TAG, "%s", payload);
 
@@ -165,6 +170,40 @@ static void mqtt_discovery() {
     cJSON_free(payload);
     cJSON_Delete(root);
     
+}
+
+static void mqtt_data(int topic_len, const char *topic, int data_len, const char *data) {
+
+    char d[10];
+    snprintf(d, sizeof(d), "%.*s", data_len, data);
+    int dnum = atoi(d);
+
+    if (dnum < 0) dnum = 0;
+
+    if (topic_len == strlen(min_set) && strncmp(topic, min_set, topic_len) == 0) {
+        led_set_min(dnum);
+    }
+
+    if (topic_len == strlen(max_set) && strncmp(topic, max_set, topic_len) == 0) {
+        led_set_max(dnum);
+    }
+
+    if (topic_len == strlen(fade_set) && strncmp(topic, fade_set, topic_len) == 0) {
+        led_set_fade(dnum);
+    }
+    
+    if (topic_len == strlen(ota_set) && strncmp(topic, ota_set, topic_len) == 0) {
+        ota_start();
+    }
+
+    if (topic_len == strlen(HA_STATUS_TOPIC) && strncmp(topic, HA_STATUS_TOPIC, topic_len) == 0 && data_len == 6 && strncmp(data, "online", 6) == 0) {
+
+        mqtt_publish(status_topic, "online", 1, 1);
+        mqtt_discovery();
+    }
+    
+
+    mqtt_state();
 }
 
 static void mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
@@ -180,6 +219,9 @@ static void mqtt_event_handler(void *arg, esp_event_base_t event_base, int32_t e
             mqtt_state();
             mqtt_subscribe(min_set);
             mqtt_subscribe(max_set);
+            mqtt_subscribe(fade_set);
+            mqtt_subscribe(ota_set);
+            mqtt_subscribe(HA_STATUS_TOPIC);
             
         }
         break;
@@ -222,7 +264,7 @@ static void ip_event_handler(void *arg, esp_event_base_t event_base, int32_t eve
     }
 }
 
-void mqtt_setup() {
+void mqtt_setup() {                                                                                     // SETUP
 
     ESP_LOGI(TAG, "MQTT setup starting...");
     
@@ -240,6 +282,7 @@ void mqtt_setup() {
     snprintf(min_state, sizeof(min_state), "%s/led_min/state", device_uid);
     snprintf(max_state, sizeof(max_state), "%s/led_max/state", device_uid);
     snprintf(fade_state, sizeof(fade_state), "%s/fade/state", device_uid);
+    snprintf(ota_set, sizeof(ota_set), "%s_ota", device_uid);
 
     ESP_LOGW(TAG, "Device_UID: %s", device_uid);
     ESP_LOGW(TAG, "Status Topic: %s", status_topic);

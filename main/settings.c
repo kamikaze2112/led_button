@@ -3,9 +3,9 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 
-#define NVS_NAMESPACE               "nightstand"
+#define NVS_NAMESPACE "button"
 
-static const char *TAG = "settings";
+static const char *TAG = "button/settings";
 
 void settings_setup() {
 
